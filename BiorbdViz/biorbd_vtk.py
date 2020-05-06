@@ -21,6 +21,8 @@ from vtk import (
     vtkRenderer,
     vtkSphereSource,
     vtkUnsignedCharArray,
+    vtkOggTheoraWriter,
+    vtkWindowToImageFilter,
 )
 from vtk.qt.QVTKRenderWindowInteractor import QVTKRenderWindowInteractor
 
@@ -63,6 +65,10 @@ class VtkWindow(QtWidgets.QMainWindow):
         self.main_layout = QtWidgets.QGridLayout()
         self.main_layout.addWidget(self.avatar_widget)
         self.frame.setLayout(self.main_layout)
+        self.video_recorder = vtkOggTheoraWriter()
+        self.is_fixed_sized = False
+        self.minimum_size = self.minimumSize()
+        self.maximum_size = self.maximumSize()
 
         self.show()
         app._in_event_loop = True
@@ -102,6 +108,35 @@ class VtkWindow(QtWidgets.QMainWindow):
         self.setPalette(
             QPalette(QColor(color[0] * 255, color[1] * 255, color[2] * 255))
         )
+
+    def record(self, finish=False, button_to_block=(), file_name=None):
+        windowToImageFilter = vtkWindowToImageFilter()
+        self.video_recorder.SetInputConnection(windowToImageFilter.GetOutputPort())
+
+        if file_name:
+            self.video_recorder.SetFileName(file_name)
+            self.video_recorder.Start()
+            if not self.is_fixed_sized:
+                self.setFixedSize(self.size())
+
+        windowToImageFilter.SetInput(self.avatar_widget.GetRenderWindow())
+        windowToImageFilter.ReadFrontBufferOff()
+        windowToImageFilter.Update()
+
+        was_true = []
+        for b in button_to_block:
+            was_true.append(b.isEnabled())
+            b.setEnabled(False)
+        self.video_recorder.Write()
+        for i, b in enumerate(button_to_block):
+            if was_true[i]:
+                b.setEnabled(True)
+
+        if finish:
+            self.video_recorder.End()
+            if not self.is_fixed_sized:
+                self.setMinimumSize(self.minimum_size)
+                self.setMaximumSize(self.maximum_size)
 
 
 class VtkModel(QtWidgets.QWidget):
@@ -223,7 +258,7 @@ class VtkModel(QtWidgets.QWidget):
             One frame of markers
 
         """
-        if markers.get_num_frames() is not 1:
+        if markers.get_num_frames() != 1:
             raise IndexError("Markers should be from one frame only")
         self.markers = markers
 
@@ -257,9 +292,9 @@ class VtkModel(QtWidgets.QWidget):
 
         """
 
-        if markers.get_num_frames() is not 1:
+        if markers.get_num_frames() != 1:
             raise IndexError("Markers should be from one frame only")
-        if markers.get_num_markers() is not self.markers.get_num_markers():
+        if markers.get_num_markers() != self.markers.get_num_markers():
             self.new_marker_set(markers)
             return  # Prevent calling update_markers recursively
         self.markers = markers
@@ -321,7 +356,7 @@ class VtkModel(QtWidgets.QWidget):
             One frame of segment center of mas
 
         """
-        if global_center_of_mass.get_num_frames() is not 1:
+        if global_center_of_mass.get_num_frames() != 1:
             raise IndexError("Global center of mass should be from one frame only")
         self.global_center_of_mass = global_center_of_mass
 
@@ -355,9 +390,9 @@ class VtkModel(QtWidgets.QWidget):
 
         """
 
-        if global_center_of_mass.get_num_frames() is not 1:
+        if global_center_of_mass.get_num_frames() != 1:
             raise IndexError("Segment center of mass should be from one frame only")
-        if global_center_of_mass.get_num_markers() is not self.global_center_of_mass.get_num_markers():
+        if global_center_of_mass.get_num_markers() != self.global_center_of_mass.get_num_markers():
             self.new_global_center_of_mass_set(global_center_of_mass)
             return  # Prevent calling update_center_of_mass recursively
         self.global_center_of_mass = global_center_of_mass
@@ -418,7 +453,7 @@ class VtkModel(QtWidgets.QWidget):
             One frame of segment center of mas
 
         """
-        if segments_center_of_mass.get_num_frames() is not 1:
+        if segments_center_of_mass.get_num_frames() != 1:
             raise IndexError("Segments center of mass should be from one frame only")
         self.segments_center_of_mass = segments_center_of_mass
 
@@ -452,9 +487,9 @@ class VtkModel(QtWidgets.QWidget):
 
         """
 
-        if segments_center_of_mass.get_num_frames() is not 1:
+        if segments_center_of_mass.get_num_frames() != 1:
             raise IndexError("Segment center of mass should be from one frame only")
-        if segments_center_of_mass.get_num_markers() is not self.segments_center_of_mass.get_num_markers():
+        if segments_center_of_mass.get_num_markers() != self.segments_center_of_mass.get_num_markers():
             self.new_segments_center_of_mass_set(segments_center_of_mass)
             return  # Prevent calling update_center_of_mass recursively
         self.segments_center_of_mass = segments_center_of_mass
@@ -508,7 +543,7 @@ class VtkModel(QtWidgets.QWidget):
             mesh_tp.append(all_meshes)
             all_meshes = mesh_tp
 
-        if all_meshes.get_num_frames() is not 1:
+        if all_meshes.get_num_frames() != 1:
             raise IndexError("Mesh should be from one frame only")
 
         if not isinstance(all_meshes, MeshCollection):
@@ -569,7 +604,7 @@ class VtkModel(QtWidgets.QWidget):
             mesh_tp.append(all_meshes)
             all_meshes = mesh_tp
 
-        if all_meshes.get_num_frames() is not 1:
+        if all_meshes.get_num_frames() != 1:
             raise IndexError("Mesh should be from one frame only")
 
         for i in range(len(all_meshes)):
@@ -631,7 +666,7 @@ class VtkModel(QtWidgets.QWidget):
             musc_tp.append(all_muscles)
             all_muscles = musc_tp
 
-        if all_muscles.get_num_frames() is not 1:
+        if all_muscles.get_num_frames() != 1:
             raise IndexError("Muscles should be from one frame only")
 
         if not isinstance(all_muscles, MeshCollection):
@@ -693,13 +728,13 @@ class VtkModel(QtWidgets.QWidget):
             musc_tp.append(all_muscles)
             all_muscles = musc_tp
 
-        if all_muscles.get_num_frames() is not 1:
+        if all_muscles.get_num_frames() != 1:
             raise IndexError("Muscle should be from one frame only")
 
         for i in range(len(all_muscles)):
             if (
                 all_muscles.get_mesh(i).get_num_vertex()
-                is not self.all_muscles.get_mesh(i).get_num_vertex()
+                != self.all_muscles.get_mesh(i).get_num_vertex()
             ):
                 self.new_muscle_set(all_muscles)
                 return  # Prevent calling update_markers recursively
@@ -742,7 +777,7 @@ class VtkModel(QtWidgets.QWidget):
         self.rt_actors = list()
 
         for i, rt in enumerate(all_rt):
-            if rt.get_num_frames() is not 1:
+            if rt.get_num_frames() != 1:
                 raise IndexError("RT should be from one frame only")
 
             # Create the polyline which will hold the actors
@@ -818,7 +853,7 @@ class VtkModel(QtWidgets.QWidget):
             rt_tp.append(all_rt[:, :])
             all_rt = rt_tp
 
-        if all_rt.get_num_rt() is not self.n_rt:
+        if all_rt.get_num_rt() != self.n_rt:
             self.new_rt_set(all_rt)
             return  # Prevent calling update_rt recursively
 
@@ -828,7 +863,7 @@ class VtkModel(QtWidgets.QWidget):
         self.all_rt = all_rt
 
         for i, rt in enumerate(self.all_rt):
-            if rt.get_num_frames() is not 1:
+            if rt.get_num_frames() != 1:
                 raise IndexError("RT should be from one frame only")
 
             # Update the end points of the axes and the origin
